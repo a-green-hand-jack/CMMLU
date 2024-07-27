@@ -18,53 +18,103 @@ for k,v in categories.items():
 
 
 def format_example(df, idx, subject, include_answer=True, cot=False):
+    """
+    根据给定的DataFrame、索引、主题和选项，格式化问题和答案。
+
+    参数:
+    df: DataFrame, 包含问题和答案的数据。
+    idx: int, 问题在DataFrame中的索引。
+    subject: str, 问题的主题。
+    include_answer: bool, 是否包含答案，默认为True。
+    cot: bool, 是否包含chain-of-thought（思考过程），默认为False。
+
+    返回:
+    str, 格式化后的问题和答案。
+    """
+    # 初始化问题的提示字符串
     prompt_start = "题目："
     prompt = prompt_start + df.iloc[idx, 0]
+    # 计算问题选项的数量
     k = df.shape[1] - 2
+    # 遍历问题选项，添加到提示字符串
     for j in range(k):
         prompt += "\n{}. {}".format(choices[j], df.iloc[idx, j + 1])
 
+    # 根据cot参数决定是否添加chain-of-thought或直接显示答案
     # Chain-of-thought
     if cot:
         prompt += "\n逐步分析并给出答案选项。"
     else:
         prompt += "\n答案是："
 
+    # 如果include_answer为True，则添加答案到提示字符串
     if include_answer:
         prompt += "{}\n\n".format(df.iloc[idx, k + 1])
     return prompt
 
 def gen_prompt(dev_df, subject, prompt_end, num_few_shot=0, tokenizer=None, max_length=2048, cot=False):
-    if cot: # Chain-of-thought
-        prompt = "以下是关于{}的单项选择题，请分析并选出正确答案。\n\n".format(name_en2zh[subject])
-    else:
-        prompt = "以下是关于{}的单项选择题，请直接给出正确答案的选项。\n\n".format(name_en2zh[subject])
+    """
+    生成用于模型提示的文本。
 
-    # If no tokenizer, don't consider max length.
-    if tokenizer==None:
+    根据给定的开发集数据框（dev_df）、主题（subject）、提示结尾（prompt_end），
+    以及少量示例数量（num_few_shot）、分词器（tokenizer）、最大长度（max_length）和
+    是否使用链式思考（cot）的指示，生成一个包含少量示例的提示文本。
+
+    参数:
+    dev_df: pandas.DataFrame, 开发集数据框，包含问题和答案。
+    subject: str, 主题，用于筛选特定主题的问题。
+    prompt_end: str, 提示文本的结束标志。
+    num_few_shot: int, 默认为0，指定用于提示的少量示例的数量。
+    tokenizer: callable, 默认为None，用于将文本分词为模型输入序列的函数。
+    max_length: int, 默认为2048，指定提示文本的最大长度。
+    cot: bool, 默认为False，指示是否使用链式思考方式生成提示。
+
+    返回:
+    str, 生成的提示文本，包括少量示例和结束标志。
+    """
+    # 根据是否使用链式思考，确定提示文本的起始格式
+    if cot:
+        cot_prompt = "以下是关于{}的单项选择题，请分析并选出正确答案。\n\n".format(name_en2zh[subject])
+    else:
+        cot_prompt = "以下是关于{}的单项选择题，请直接给出正确答案的选项。\n\n".format(name_en2zh[subject])
+
+    # 如果没有指定分词器，直接组合所有示例并返回
+    if tokenizer is None:
+        prompt = cot_prompt
         for i in range(num_few_shot):
             example = format_example(dev_df, i, subject)
             prompt += example
         return prompt + prompt_end
-
+    else:
+        prompt = cot_prompt
+    # 计算提示文本起始和结束部分的长度
+    # start_end_token_len = len(tokenizer.encode(prompt)+tokenizer.encode(prompt_end))
+    # 感觉这里有问题啊，prompt 还没有定义就先使用了
     start_end_token_len = len(tokenizer.encode(prompt)+tokenizer.encode(prompt_end))
-    # If cannot fit in model even without training data, remove the prompt at the beginning.
-    if start_end_token_len>max_length:
+
+    # 如果起始和结束部分的长度已经超过最大长度，直接返回结束标志
+    if start_end_token_len > max_length:
         return prompt_end
 
     prompt_list = []
+    # 如果指定使用少量示例，构建示例列表及其对应的编码
     if num_few_shot > 0:
         for i in range(num_few_shot):
             example = format_example(dev_df, i, subject)
             prompt_list.append((example, tokenizer.encode(example)))
 
+        # 确保所有示例的编码长度之和不超过最大长度
         while prompt_list != [] and sum(len(e[1]) for e in prompt_list) >= max_length - start_end_token_len:
+            # 如果有示例长度超过限制，移除最长的示例
             print(f"Warning: {len(prompt_list)} shot case exceeds max_input_length, remove 1 shot.")
             longest_length = max([len(e[1]) for e in prompt_list])
             prompt_list = [e for e in prompt_list if len(e[1]) != longest_length]
+
+        # 将示例文本添加到提示文本中
         for p in prompt_list:
             prompt += p[0]
 
+    # 组合最终的提示文本和结束标志，并返回
     return prompt + prompt_end
 
 

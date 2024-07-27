@@ -1,4 +1,6 @@
 import os
+# 设置HF_HOME环境变量
+os.environ['HF_HOME'] = "/root/autodl-fs/pre-trained-models/"
 import torch
 import argparse
 from mp_utils import choices, format_example, gen_prompt, softmax, run_eval
@@ -8,7 +10,7 @@ from peft import PeftModel
 from transformers import LlamaForCausalLM, LlamaTokenizer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
+from pathlib import Path
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name_or_path", type=str, default="")
@@ -23,11 +25,13 @@ if __name__ == "__main__":
     # TODO: better handle
     tokenizer_class = LlamaTokenizer if 'llama' in args.model_name_or_path else AutoTokenizer
     model_class = LlamaForCausalLM if 'llama' in args.model_name_or_path else AutoModelForCausalLM
-    tokenizer = tokenizer_class.from_pretrained(args.lora_weights) # Specific for Chinese_llama_alpaca
+    
+    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, ) # Specific for Chinese_llama_alpaca
     model = model_class.from_pretrained(args.model_name_or_path,
                                         torch_dtype=torch.float16, # Follow https://github.com/ymcui/Chinese-LLaMA-Alpaca/blob/main/scripts/inference_hf.py
                                         load_in_8bit=args.load_in_8bit,
-                                        device_map="auto"
+                                        device_map="auto",
+                                         # 应该是有更优雅的解决方法的，但是没有奏效
                                         )
     if args.lora_weights != "":
         # Specific for Chinese_llama_alpaca

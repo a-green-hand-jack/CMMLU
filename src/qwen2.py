@@ -8,7 +8,10 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
-
+# 设置HF_HOME环境变量
+os.environ['HF_HOME'] = "/root/autodl-fs/pre-trained-models/"
+os.environ['HF_ENDPOINT'] = "https://hf-mirror.com"
+device = "cuda" # the device to load the model onto
 def is_eval_success(args) -> bool:
     """
     Check if the evaluation is successful.
@@ -211,7 +214,7 @@ def eval_chat(
 
         # 通过模型生成答案
         generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512)
-        # 提取生成的答案
+        # 提取生成的答案；同时过滤掉输入的部分
         generated_ids = [
             output_ids[len(input_ids) :]
             for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)

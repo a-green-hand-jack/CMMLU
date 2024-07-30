@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 from categories import name_en2zh, subcategories, categories
-choices = ["A", "B", "C", "D"]
+# choices = ["A", "B", "C", "D"]
+choices = ["A", "B", "C", "D", "E", "F"]
 
 category2subject = defaultdict(list)
 for k,v in categories.items():
@@ -73,10 +74,14 @@ def gen_prompt(dev_df, subject, prompt_end, num_few_shot=0, tokenizer=None, max_
     str, 生成的提示文本，包括少量示例和结束标志。
     """
     # 根据是否使用链式思考，确定提示文本的起始格式
+    # if cot:
+    #     cot_prompt = "以下是关于{}的单项选择题，请分析并选出正确答案。\n\n".format(name_en2zh[subject])
+    # else:
+    #     cot_prompt = "以下是关于{}的单项选择题，请直接给出正确答案的选项。\n\n".format(name_en2zh[subject])
     if cot:
-        cot_prompt = "以下是关于{}的单项选择题，请分析并选出正确答案。\n\n".format(name_en2zh[subject])
+        cot_prompt = "以下是关于{}的单项选择题，请分析并选出正确答案。\n\n".format(subject)
     else:
-        cot_prompt = "以下是关于{}的单项选择题，请直接给出正确答案的选项。\n\n".format(name_en2zh[subject])
+        cot_prompt = "以下是关于{}的单项选择题，请直接给出正确答案的选项。\n\n".format(subject)
 
     # 如果没有指定分词器，直接组合所有示例并返回
     if tokenizer is None:

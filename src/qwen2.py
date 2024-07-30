@@ -8,19 +8,33 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
+import debugpy
+
+# try:
+#     # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to 127.0.0.1
+#     debugpy.listen(("localhost", 7925))
+#     print("Waiting for debugger attach")
+#     print("the python code is qwen2.py")
+#     print("the host is: localhost, the port is: 7925")
+#     debugpy.wait_for_client()
+# except Exception as e:
+#     pass
+
 # 设置HF_HOME环境变量
-os.environ['HF_HOME'] = "/root/autodl-fs/pre-trained-models/"
-os.environ['HF_ENDPOINT'] = "https://hf-mirror.com"
-device = "cuda" # the device to load the model onto
+os.environ["HF_HOME"] = "/root/autodl-fs/pre-trained-models/"
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+device = "cuda"  # the device to load the model onto
+
+
 def is_eval_success(args) -> bool:
     """
     Check if the evaluation is successful.
 
     This function checks whether the evaluation of all subjects is successfully completed by verifying the existence of result files in the specified directory.
-    
+
     Parameters:
     args: An argument object containing the directory path and other information.
-    
+
     Returns:
     bool: Returns True if the evaluation results of all subjects are present, otherwise returns False.
     """
@@ -29,24 +43,24 @@ def is_eval_success(args) -> bool:
     subjects = sorted(
         [f.split(".csv")[0] for f in os.listdir(os.path.join(args.data_dir, "test/"))]
     )
-    
+
     # Construct the path of the directory where the results are saved
     abs_save_dir = f"{args.save_dir}_{args.num_few_shot}_shot"
-    
+
     # If the directory does not exist, the evaluation is not considered successful
     if not os.path.exists(abs_save_dir):
         return False
-    
+
     # Iterate through all subjects
     for subject in subjects:
         # Construct the path of the result file for the subject
         out_file = os.path.join(abs_save_dir, f"results_{subject}.csv")
-        
+
         # If the result file for any subject does not exist, the evaluation is not considered successful
         if not os.path.exists(out_file):
             # If any result file NOT exist, the eval isn't finished
             return False
-    
+
     # If the result file for all subjects exists, the evaluation is considered successful
     return True
 
@@ -54,13 +68,13 @@ def is_eval_success(args) -> bool:
 def init_model(args):
     """
     Initialize the language model.
-    
+
     This function initializes a causal language model (CLM) based on the pre-trained model name or path provided by the arguments.
     It sets the model to use half-precision floating-point (float16) for computation to improve efficiency and reduces memory usage.
-    
+
     Parameters:
     - args: An argument namespace containing the model name or path and other related configuration information.
-    
+
     Returns:
     - model: The initialized language model.
     """
@@ -72,13 +86,14 @@ def init_model(args):
         trust_remote_code=True,
         device_map="auto",
         torch_dtype=torch.float16,
+        cache_dir=args.cache_dir,
     )
-    
+
     # Import the generation configuration of the pre-trained model to ensure the model's generation behavior is consistent with the pre-trained model.
     model.generation_config = GenerationConfig.from_pretrained(
         args.model_name_or_path, trust_remote_code=True
     )
-    
+
     return model
 
 
@@ -141,7 +156,7 @@ def eval(model, tokenizer, subject, dev_df, test_df, num_few_shot, max_length, c
             conf = softmax(choice_logits[0])[choices.index(label)]
             # 预测结果为logits最大值对应的选项
             pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(choice_logits[0])]
-        
+
         # 更新预测结果、置信度和预测正确与否的列表
         all_preds += pred
         all_conf.append(conf)
@@ -160,7 +175,7 @@ def eval_chat(
 ):
     """
     评估模型在聊天任务上的性能。
-    
+
     参数:
     model: 预训练的语言模型。
     tokenizer: 用于编码和解码的分词器。
@@ -170,7 +185,7 @@ def eval_chat(
     num_few_shot: 少样本学习中使用的样本数量。
     max_length: 生成答案的最大长度。
     cot: 是否包含上下文提示。
-    
+
     返回:
     acc: 模型预测的准确率。
     all_preds: 所有预测的答案。
@@ -249,10 +264,13 @@ if __name__ == "__main__":
     parser.add_argument("--num_few_shot", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--cot", action="store_true")
+    parser.add_argument("--cache_dir", type=str, default="/root/autodl-fs/pre-trained-models/hub/")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path, trust_remote_code=True
+        args.model_name_or_path,
+        trust_remote_code=True,
+        cache_dir=args.cache_dir,
     )
     if is_eval_success(args):
         # eval finished, no need load model anymore, just show the result
@@ -260,7 +278,8 @@ if __name__ == "__main__":
     else:
         model = init_model(args)
 
-    if "chat" in args.model_name_or_path.lower():
-        run_eval(model, tokenizer, eval_chat, args)
-    else:
-        run_eval(model, tokenizer, eval, args)
+    # if "chat" in args.model_name_or_path.lower():
+    #     run_eval(model, tokenizer, eval_chat, args)
+    # else:
+    #     run_eval(model, tokenizer, eval, args)
+    run_eval(model, tokenizer, eval_chat, args)

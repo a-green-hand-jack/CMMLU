@@ -163,7 +163,7 @@ def run_eval(model, tokenizer, eval, args):
         test_df.to_csv(out_file, header=None)
 
     # print result
-    get_results(args.save_dir)
+    # get_results(args.save_dir)
 
 
 def extract_choice(response):

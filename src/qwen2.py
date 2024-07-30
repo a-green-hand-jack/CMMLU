@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+from peft import PeftModel
 
 import debugpy
 
@@ -96,6 +97,42 @@ def init_model(args):
 
     return model
 
+def init_fine_tuned_model(args):
+    """
+    初始化微调后的模型。
+    
+    该函数从预训练模型开始，对其进行微调以适应特定任务。它使用了AutoModelForCausalLM来加载预训练模型，
+    然后配置生成设置，并最终加载特定的微调模型。
+    
+    参数:
+    args: Namespace
+        包含模型配置和路径的参数对象。其中包括模型名称或路径（model_name_or_path）、缓存目录（cache_dir）和PEFT模型ID（peft_model_id）。
+        
+    返回:
+    PeftModel
+        微调后的预训练模型，配置为适用于特定任务的生成模型。
+    """
+    
+    # 从预训练模型加载AutoModelForCausalLM，配置包括模型路径、信任远程代码、设备映射、数据类型和缓存目录。
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name_or_path,
+        trust_remote_code=True,
+        device_map="auto",
+        torch_dtype=torch.float16,
+        cache_dir=args.cache_dir,
+    )
+
+    # 设置模型的生成配置，从预训练模型加载并信任远程代码。
+    model.generation_config = GenerationConfig.from_pretrained(
+        args.model_name_or_path, trust_remote_code=True
+    )
+    
+    # 从预训练模型加载PEFT模型，指定微调后的模型和模型ID。
+    pretrained_model = PeftModel.from_pretrained(model=model, model_id=args.peft_model_id)
+    print(pretrained_model)
+
+    # 返回微调后的PEFT模型。
+    return pretrained_model
 
 def eval(model, tokenizer, subject, dev_df, test_df, num_few_shot, max_length, cot):
     """
@@ -245,6 +282,10 @@ def eval_chat(
 
     # 计算准确率
     acc = np.mean(cors)
+    # 将准确率写入本地文件
+    out_file = os.path.join(args.save_dir, f"results_{subject}.txt")
+    with open(out_file, 'a') as file:
+        file.write(f"Accuracy for {subject}: {acc:.3f}\n")
     # 打印准确率和结果统计
     print("Average accuracy {:.3f} - {}".format(acc, subject))
     print(
@@ -265,6 +306,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--cot", action="store_true")
     parser.add_argument("--cache_dir", type=str, default="/root/autodl-fs/pre-trained-models/hub/")
+    parser.add_argument("--peft_model_id", type=str, default="", help="peft model id")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -276,7 +318,10 @@ if __name__ == "__main__":
         # eval finished, no need load model anymore, just show the result
         model = None
     else:
-        model = init_model(args)
+        if args.peft_model_id:
+            model = init_fine_tuned_model(args)
+        else:
+            model = init_model(args)
 
     # if "chat" in args.model_name_or_path.lower():
     #     run_eval(model, tokenizer, eval_chat, args)

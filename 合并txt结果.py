@@ -32,5 +32,5 @@ def concatenate_txt_files_in_folder(folder_path):
     print(f"All .txt files in '{folder_path}' have been concatenated and saved to '{new_file_path}'.")
 
 if __name__ == "__main__":
-    folder_path = './results_bio/Qwen2-7B-Instruct-zeroshot-finetuned_0_shot'
+    folder_path = './results_bio/Qwen2-7B-Instruct-fiveshot-finetuned-big_2_shot'
     concatenate_txt_files_in_folder(folder_path)

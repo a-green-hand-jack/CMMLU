@@ -17,18 +17,18 @@ echo "Program name: src/qwen2.py"
 echo "Starting at: $(date)"
 python qwen2.py \
     --model_name_or_path Qwen/Qwen2-7B-Instruct \
-    --save_dir ../results_bio/Qwen2-7B-Instruct-zeroshot-finetuned \
+    --save_dir ../results_bio/Qwen2-7B-Instruct-zeroshot-finetuned-big \
     --num_few_shot 0    \
     --data_dir ../finetune_data_split   \
     --cache_dir /root/autodl-fs/pre-trained-models/hub/ \
-    --peft_model_id /root/autodl-tmp/project/BIO/llama3-bio-edu/output/bio-train-map/peft_model
+    --peft_model_id /root/autodl-tmp/project/BIO/llama3-bio-edu/output/bio-two/peft_model
 
 echo "Starting at: $(date)"
 python qwen2.py \
     --model_name_or_path Qwen/Qwen2-7B-Instruct \
-    --save_dir ../results_bio/Qwen2-7B-Instruct-fiveshot-finetuned \
+    --save_dir ../results_bio/Qwen2-7B-Instruct-fiveshot-finetuned-big \
     --num_few_shot 2    \
     --data_dir ../finetune_data_split   \
     --cache_dir /root/autodl-fs/pre-trained-models/hub/ \
-    --peft_model_id /root/autodl-tmp/project/BIO/llama3-bio-edu/output/bio-train-map/peft_model
+    --peft_model_id /root/autodl-tmp/project/BIO/llama3-bio-edu/output/bio-two/peft_model
 

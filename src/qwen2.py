@@ -97,22 +97,23 @@ def init_model(args):
 
     return model
 
+
 def init_fine_tuned_model(args):
     """
     初始化微调后的模型。
-    
+
     该函数从预训练模型开始，对其进行微调以适应特定任务。它使用了AutoModelForCausalLM来加载预训练模型，
     然后配置生成设置，并最终加载特定的微调模型。
-    
+
     参数:
     args: Namespace
         包含模型配置和路径的参数对象。其中包括模型名称或路径（model_name_or_path）、缓存目录（cache_dir）和PEFT模型ID（peft_model_id）。
-        
+
     返回:
     PeftModel
         微调后的预训练模型，配置为适用于特定任务的生成模型。
     """
-    
+
     # 从预训练模型加载AutoModelForCausalLM，配置包括模型路径、信任远程代码、设备映射、数据类型和缓存目录。
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
@@ -126,85 +127,53 @@ def init_fine_tuned_model(args):
     model.generation_config = GenerationConfig.from_pretrained(
         args.model_name_or_path, trust_remote_code=True
     )
-    
+
     # 从预训练模型加载PEFT模型，指定微调后的模型和模型ID。
-    pretrained_model = PeftModel.from_pretrained(model=model, model_id=args.peft_model_id)
+    pretrained_model = PeftModel.from_pretrained(
+        model=model, model_id=args.peft_model_id
+    )
     print(pretrained_model)
 
     # 返回微调后的PEFT模型。
     return pretrained_model
 
-def eval(model, tokenizer, subject, dev_df, test_df, num_few_shot, max_length, cot):
+def extract_answers(text: str) -> str:
     """
-    评估模型在特定主题上的表现。
-
-    使用few-shot学习方法，根据开发集生成提示(prompt)，然后在测试集上对模型进行评估。
+    从给定的字符串中提取大写的英文字母，并返回一个新的字符串。
 
     参数:
-    model: 训练好的模型，用于预测。
-    tokenizer: 用于将文本转换为模型输入的tokenizer。
-    subject: 评估的主题。
-    dev_df: 开发集DataFrame。
-    test_df: 测试集DataFrame。
-    num_few_shot: few-shot学习中使用的样本数量。
-    max_length: 输入序列的最大长度。
-    cot: 是否包含选项在提示中。
+    text (str): 包含大写字母的原始字符串。
 
     返回:
-    准确率、所有预测结果的列表和一个占位符None。
+    str: 仅包含从原始字符串中提取的大写字母的新字符串。
     """
-    # 将选项文本转换为tokenizer编码
-    choice_ids = [tokenizer(choice)["input_ids"][0] for choice in choices]
-    cors = []  # 存储预测结果与真实标签是否一致
-    all_conf = []  # 存储所有预测的置信度
-    all_preds = []  # 存储所有预测的结果
-    answers = choices[: test_df.shape[1] - 2]  # 获取答案列表
 
-    # 遍历测试集中的每个样本
-    for i in range(test_df.shape[0]):
-        # 根据当前样本格式化示例，生成prompt的结尾部分
-        prompt_end = format_example(test_df, i, subject, include_answer=False, cot=cot)
-        # 根据开发集和当前样本生成完整的prompt
-        prompt = gen_prompt(
-            dev_df=dev_df,
-            subject=subject,
-            prompt_end=prompt_end,
-            num_few_shot=num_few_shot,
-            tokenizer=tokenizer,
-            max_length=max_length,
-            cot=cot,
-        )
-        label = test_df.iloc[i, test_df.shape[1] - 1]  # 获取当前样本的真实标签
+    # 提取并返回所有大写字母
+    return ''.join([char for char in text if char.isupper()])
 
-        # 关闭梯度计算，提高推理效率
-        with torch.no_grad():
-            # 将prompt转换为模型输入的格式
-            input_ids = tokenizer([prompt], padding=False)["input_ids"]
-            input_ids = torch.tensor(input_ids, device=model.device)
-            # 获取模型预测的logits
-            logits = model(input_ids)["logits"]
-            last_token_logits = logits[:, -1, :]  # 获取最后一个token的logits
-            # 如果logits的类型是低精度浮点数，则转换为float32以提高计算精度
-            if last_token_logits.dtype in {torch.bfloat16, torch.float16}:
-                last_token_logits = last_token_logits.to(dtype=torch.float32)
-            # 根据选项的ids提取对应logits
-            choice_logits = last_token_logits[:, choice_ids].detach().cpu().numpy()
-            # 计算模型对真实标签的置信度
-            conf = softmax(choice_logits[0])[choices.index(label)]
-            # 预测结果为logits最大值对应的选项
-            pred = {0: "A", 1: "B", 2: "C", 3: "D"}[np.argmax(choice_logits[0])]
 
-        # 更新预测结果、置信度和预测正确与否的列表
-        all_preds += pred
-        all_conf.append(conf)
-        cors.append(pred == label)
 
-    # 计算预测准确率
-    acc = np.mean(cors)
-    # 打印准确率结果
-    print("Average accuracy {:.3f} - {}".format(acc, subject))
-    # 返回准确率、所有预测结果和一个占位符None
-    return acc, all_preds, None
+def is_composed_of(pred, choices):
+    """
+    检查一个字符串是否完全由另一组字符串中的字符组成。
+
+    参数:
+    pred (str): 需要检查的字符串。
+    choices (iterable): 作为检查依据的字符串集合。
+
+    返回:
+    bool: 如果pred中的所有字符都存在于choices中，则返回True，否则返回False。
+
+    示例:
+    >>> is_composed_of("abc", ["a", "b", "c", "d"])
+    True
+    >>> is_composed_of("xyz", ["a", "b", "c"])
+    False
+    """
+
+    # 使用all函数检查pred中的每个字符是否都在choices中
+    # 这里使用生成器表达式提供一个更高效和简洁的方法来检查字符存在性
+    return all(char in choices for char in pred)
 
 
 def eval_chat(
@@ -273,18 +242,21 @@ def eval_chat(
         ]
 
         # 解码生成的答案
-        pred = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        pred_model = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        
+        pred = extract_answers(text=pred_model)
+        
         # 如果预测答案有效，则与正确答案比较
-        if pred and pred[0] in choices:
-            cors.append(pred[0] == label)
-        # 记录所有预测答案
+        if pred and is_composed_of(pred, choices):
+            cors.append(pred == label)
+
         all_preds.append(pred.replace("\n", ""))
 
     # 计算准确率
     acc = np.mean(cors)
     # 将准确率写入本地文件
     out_file = os.path.join(args.save_dir, f"results_{subject}.txt")
-    with open(out_file, 'a') as file:
+    with open(out_file, "a") as file:
         file.write(f"Accuracy for {subject}: {acc:.3f}\n")
     # 打印准确率和结果统计
     print("Average accuracy {:.3f} - {}".format(acc, subject))
@@ -305,7 +277,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_few_shot", type=int, default=0)
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--cot", action="store_true")
-    parser.add_argument("--cache_dir", type=str, default="/root/autodl-fs/pre-trained-models/hub/")
+    parser.add_argument(
+        "--cache_dir", type=str, default="/root/autodl-fs/pre-trained-models/hub/"
+    )
     parser.add_argument("--peft_model_id", type=str, default="", help="peft model id")
     args = parser.parse_args()
 
@@ -323,8 +297,4 @@ if __name__ == "__main__":
         else:
             model = init_model(args)
 
-    # if "chat" in args.model_name_or_path.lower():
-    #     run_eval(model, tokenizer, eval_chat, args)
-    # else:
-    #     run_eval(model, tokenizer, eval, args)
     run_eval(model, tokenizer, eval_chat, args)
